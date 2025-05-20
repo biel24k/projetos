@@ -23,23 +23,20 @@ spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5
 sheet = spreadsheet.get_worksheet(0)
 valores = sheet.col_values(1)[1:]  # Pega os valores da coluna A a partir da linha 2
 
-# === 2. Configurando o Selenium ===
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+# Configurando o Selenium
 servico = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=servico)
 
-     # === 3.1 Acessar o site ===
+     # Acessar o site
 driver.get(url)
 
-     # === 3.2 Login ===
+     # Login
 driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[1]/input').send_keys(usuario)
 driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[2]/input').send_keys(senha)
 driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 driver.execute_script("window.scrollBy(0, 200);")
 
-     # === 3.3 Localiza e clica no Consultar ===
+     # Localiza e clica no Consultar
 consultar_link = WebDriverWait(driver, 3).until(
     EC.presence_of_element_located((By.XPATH, '//a[contains(., "Consultar")]'))
 )
