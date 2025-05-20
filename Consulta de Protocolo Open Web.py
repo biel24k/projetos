@@ -17,10 +17,10 @@ inicio = time.time()
 # Autorização do Google Sheets
 scope = ["https://spreadsheets.google.com/feeds",
          "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("telematica-459812-2dcf92fe61ca.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("minhachave.json", scope)
 client = gspread.authorize(creds)
 spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5aTHrtnQR44ofJS8PXHbKbyzr30F5_II_zggaE/edit?gid=0#gid=0")
-sheet = spreadsheet.get_worksheet(0)
+sheet = spreadsheet.get_worksheet(0) # Primeira aba da planilha
 valores = sheet.col_values(1)[1:]  # Pega os valores da coluna A a partir da linha 2
 
 # Configurando o Selenium
@@ -43,7 +43,7 @@ consultar_link = WebDriverWait(driver, 3).until(
 consultar_link.click()
 
 #                 LIMITANDO A CONSULTA PARA APENAS OS 21 PRIMEIROS
-for i, Protocolo in enumerate(valores[:3], start=404):  # começa na linha 2
+for i, Protocolo in enumerate(valores[:3], start=400):  # Esse exemplo começa na linha 400 da planilha e consulta e atualiza apenas 3 linhas
     print(f"Consultando valor: {Protocolo}")
 
     # Localiza e preenche o campo Procurar
