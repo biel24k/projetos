@@ -11,6 +11,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 inicio = time.time()
 
 
@@ -25,12 +26,6 @@ spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5
 # SELECIONA A ABA DA PLANILHA
 sheet = spreadsheet.get_worksheet(1)
 valores = sheet.col_values(1)[1:]  # PEGA OS VALORES DA COLUNA "A" A PARTIR DA LINHA 2
-
-# CONFIGURANDO SELENIUM
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
 
 # CONFIGURAÇÃO PARA RODAR EM SEGUNDO PLANO (CLOSE WEB - headless)
 options = Options()
