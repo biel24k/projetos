@@ -1,152 +1,113 @@
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-import gspread
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-from oauth2client.service_account import ServiceAccountCredentials
-from selenium.webdriver.chrome.service import Service
-from Dados import *
-import pandas as pd
-import time
-import os
-inicio = time.time()
+# Configurações iniciais e variáveis de ambiente
+DOWNLOAD_PATH = os.path.join(os.path.expanduser("~"), "Downloads")
+GOOGLE_SHEETS_URL = os.getenv("GOOGLE_SHEETS_URL")
+CREDENTIALS_FILE = os.getenv("CREDENTIALS_FILE", "credentials.json")
+USUARIO = os.getenv("PORTAL_USUARIO")
+SENHA = os.getenv("PORTAL_SENHA")
+PORTAL_URL = os.getenv("PORTAL_URL")
 
-# === CONFIGURAR PASTA DE DOWNLOAD ===
-download_path = os.path.join(os.path.expanduser("~"), "Downloads")
+# Prepara o navegador com diretório de download automático
 chrome_options = Options()
 chrome_options.add_experimental_option("prefs", {
-    "download.default_directory": download_path,
+    "download.default_directory": DOWNLOAD_PATH,
     "download.prompt_for_download": False,
     "directory_upgrade": True
 })
-
-# === INICIAR NAVEGADOR ===
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-driver.get("https://portal.epontodespacho.com.br/login?returnUrl=%2Fhome")
+driver.get(PORTAL_URL)
 
-# === LOGIN ===
-driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[1]/input').send_keys(usuario)
-driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[2]/input').send_keys(senha)
+# Faz login no portal com as credenciais
+driver.find_element(By.XPATH, '//input[@formcontrolname="Login"]').send_keys(USUARIO)
+driver.find_element(By.XPATH, '//input[@formcontrolname="Senha"]').send_keys(SENHA)
 driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 time.sleep(2)
 
-# === ACESSAR RELATÓRIOS ===
+# Navega até a área de relatórios
 driver.find_element(By.XPATH, "//a[@href='/relatorio/consultar']").click()
 time.sleep(2)
 
-# === DEFINIR DATAS ===
-data_inicio = datetime(datetime.now().year, datetime.now().month, 1).strftime('%d/%m/%Y')
-campo_data_inicio = driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataInicial']")
-campo_data_inicio.click()
-campo_data_inicio.send_keys(data_inicio)
-data_fim = datetime.now().strftime('%d/%m/%Y')
-campo_data_fim = driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataFinal']")
-campo_data_fim.click()
-campo_data_fim.send_keys(data_fim)
+# Preenche os campos de data com o início do mês até hoje
+hoje = datetime.now()
+data_inicio = datetime(hoje.year, hoje.month, 1).strftime('%d/%m/%Y')
+data_fim = hoje.strftime('%d/%m/%Y')
 
-# === SELECIONAR RELATÓRIO E EXPORTAR ===
+driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataInicial']").send_keys(data_inicio)
+driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataFinal']").send_keys(data_fim)
+
+# Escolhe o tipo de relatório e solicita exportação em CSV
 driver.find_element(By.CSS_SELECTOR, ".select2-selection").click()
 WebDriverWait(driver, 10).until(
     EC.visibility_of_element_located((By.XPATH, "//li[text()='RELATÓRIO DE ATENDIMENTO']"))
 ).click()
-
 driver.find_element(By.XPATH, "//button[text()='Exportar relatório em CSV']").click()
 WebDriverWait(driver, 10).until(
     EC.element_to_be_clickable((By.XPATH, "//button[text()=' Sim ']"))
 ).click()
 
-# === AGUARDAR DOWNLOAD E FECHAR NAVEGADOR ===
+# Aguarda um tempo para download e encerra o navegador
 time.sleep(3)
 driver.quit()
 
-# === LOCALIZAR CSV MAIS RECENTE ===
-arquivos_csv = [f for f in os.listdir(download_path) if f.endswith('.csv')]
-caminho_completo = os.path.join(
-    download_path,
-    max(arquivos_csv, key=lambda f: os.path.getmtime(os.path.join(download_path, f)))
-)
+# Busca o arquivo CSV mais recente na pasta de downloads
+csv_arquivos = [f for f in os.listdir(DOWNLOAD_PATH) if f.endswith('.csv')]
+csv_path = os.path.join(DOWNLOAD_PATH, max(csv_arquivos, key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_PATH, f))))
 
-# === CARREGAR CSV ===
-df_csv = pd.read_csv(caminho_completo, delimiter=';', on_bad_lines='skip', encoding='utf-8')
+# Lê o conteúdo do CSV
+df_csv = pd.read_csv(csv_path, delimiter=';', on_bad_lines='skip', encoding='utf-8')
 
-# === AUTENTICAÇÃO GOOGLE SHEETS ===
+# Conecta à planilha do Google usando as credenciais de serviço
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("minhachave.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
 client = gspread.authorize(creds)
+sheet = client.open_by_url(GOOGLE_SHEETS_URL).get_worksheet(1)
 
-spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5aTHrtnQR44ofJS8PXHbKbyzr30F5_II_zggaE/edit?gid=0#gid=0")
-# TRECHO RESPONSÁVEL PELA ABA DA PLANILHA
-sheet = spreadsheet.get_worksheet(1) # segunda aba
-print("Planilha aberta com sucesso:", spreadsheet.title)
-
-# === CONFIGURAÇÃO DE CABEÇALHOS ===
+# Define os nomes das colunas que queremos manter na planilha
 colunas_chave = [
     "Protocolo", "Cliente", "Ocorrencia", "FilaAtendimento", "Responsavel/Tecnico",
     "DataAbertura", "Status", "Tipo_de_Chamado", "Nome_Fantasia",
     "Razao_Social", "Local_de_Atendimento", "Status_de_Consulta"
 ]
 
+# Garante que os cabeçalhos na planilha estejam corretos
 titulos = sheet.row_values(1)
 if titulos != colunas_chave or '' in titulos or len(set(titulos)) != len(titulos):
-    print("Atualizando cabeçalhos...")
     sheet.update('A1', [colunas_chave])
+    print("Cabeçalhos atualizados.")
 else:
-    print("Cabeçalhos válidos encontrados.")
+    print("Cabeçalhos corretos já existentes.")
 
-# === OBTER DADOS EXISTENTES ===
-registros_existentes = sheet.get_all_records(expected_headers=colunas_chave)
+# Limpa o conteúdo antigo da planilha, se houver
 num_linhas = len(sheet.get_all_values())
 if num_linhas > 1:
     sheet.batch_clear([f'A2:Z{num_linhas}'])
-    print(f"{num_linhas - 1} linhas apagadas da planilha.")
+    print(f"{num_linhas - 1} linhas removidas da planilha.")
 else:
-    print("Planilha já limpa.")
+    print("Nenhuma linha para limpar.")
 
-# === CRIAR CONJUNTO DE IDS EXISTENTES ===
-ids_existentes = {
-    ''.join(str(registro.get(col, "")).strip() for col in colunas_chave)
-    for registro in registros_existentes
-}
-
-# === FILTRAR NOVAS LINHAS ===
+# Remove duplicatas e prepara os dados que ainda não foram adicionados
+ids_existentes = set()
 novas_linhas = []
+
 for _, row in df_csv.iterrows():
     chave = ''.join(str(row.get(col, "")).strip() for col in colunas_chave)
     if chave not in ids_existentes:
-        novas_linhas.append(row)
         ids_existentes.add(chave)
+        novas_linhas.append([row.get(col, "").strip() for col in colunas_chave])
 
-if not novas_linhas:
+# Adiciona os dados novos na planilha
+if novas_linhas:
+    sheet.append_rows(novas_linhas, value_input_option="USER_ENTERED")
+    print(f"{len(novas_linhas)} novas entradas adicionadas.")
+else:
     print("Nenhuma nova entrada para adicionar.")
-else:
-    df_novos = pd.DataFrame(novas_linhas).fillna("")
 
-    # Garantir coluna 'Status_de_Consulta'
-    if 'Status_de_Consulta' not in df_novos.columns:
-        df_novos['Status_de_Consulta'] = ''
-    # Garantir coluna 'Responsavel/Tecnico'
-    if 'Responsavel/Tecnico' not in df_novos.columns:
-        df_novos['Responsavel/Tecnico'] = ''
+# Exclui o arquivo CSV usado para liberar espaço
+try:
+    os.remove(csv_path)
+    print(f"CSV removido: {csv_path}")
+except FileNotFoundError:
+    print("CSV já removido ou não encontrado.")
 
-    # Organizar e adicionar
-    dados = df_novos[colunas_chave].values.tolist()
-    sheet.append_rows(dados, value_input_option="USER_ENTERED")
-    print(f"Novas entradas adicionadas: {len(dados)}")
-
-# === EXCLUIR CSV USADO ===
-if os.path.exists(caminho_completo):
-    os.remove(caminho_completo)
-    print(f"Arquivo CSV removido: {caminho_completo}")
-else:
-    print("CSV já havia sido removido ou não encontrado.")
-
-
-
+# Exibe o tempo total de execução do script
 fim = time.time()
-duracao = fim - inicio
-minutos = int(duracao // 60)
-segundos = int(duracao % 60)
-print(f"Tempo total de execução: {minutos} minuto(s) e {segundos} segundo(s).")
+print(f"Tempo total: {int((fim - inicio) // 60)} minuto(s) e {int((fim - inicio) % 60)} segundo(s).")
