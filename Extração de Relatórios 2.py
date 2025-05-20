@@ -43,21 +43,6 @@ campo_data_inicio = driver.find_element(By.CSS_SELECTOR, "input[formcontrolname=
 campo_data_inicio.click()
 campo_data_inicio.send_keys(data_inicio)
 data_fim = datetime.now().strftime('%d/%m/%Y')
-
-
-# # MÊS ANTERIOR VVVVVVVVVVVVVVVV
-# from dateutil.relativedelta import relativedelta
-# # === DEFINIR DATAS ===
-# primeiro_dia_mes_anterior = datetime.now().replace(day=1) - relativedelta(months=1)
-# ultimo_dia_mes_anterior = datetime.now().replace(day=1) - relativedelta(days=1)
-
-# data_inicio = primeiro_dia_mes_anterior.strftime('%d/%m/%Y')
-# data_fim = ultimo_dia_mes_anterior.strftime('%d/%m/%Y')
-
-
-# campo_data_inicio = driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataInicial']")
-# campo_data_inicio.click()
-# campo_data_inicio.send_keys(data_inicio)
 campo_data_fim = driver.find_element(By.CSS_SELECTOR, "input[formcontrolname='DataFinal']")
 campo_data_fim.click()
 campo_data_fim.send_keys(data_fim)
@@ -89,12 +74,12 @@ df_csv = pd.read_csv(caminho_completo, delimiter=';', on_bad_lines='skip', encod
 
 # === AUTENTICAÇÃO GOOGLE SHEETS ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("telematica-459812-2dcf92fe61ca.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("minhachave.json", scope)
 client = gspread.authorize(creds)
 
 spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5aTHrtnQR44ofJS8PXHbKbyzr30F5_II_zggaE/edit?gid=0#gid=0")
 # TRECHO RESPONSÁVEL PELA ABA DA PLANILHA
-sheet = spreadsheet.get_worksheet(1)
+sheet = spreadsheet.get_worksheet(1) # segunda aba
 print("Planilha aberta com sucesso:", spreadsheet.title)
 
 # === CONFIGURAÇÃO DE CABEÇALHOS ===
