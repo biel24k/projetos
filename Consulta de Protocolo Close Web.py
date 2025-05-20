@@ -47,7 +47,7 @@ driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 driver.execute_script("window.scrollBy(0, 200);")
 
 # LOCALIZA E CLICA NO CONSULTAR
-# LIMITANDO A CONSULTA PARA APENAS OS 21 PRIMEIROS
+# LIMITANDO A CONSULTA PARA APENAS OS 100 PRIMEIROS
 # for i, Protocolo in enumerate(valores[:100], start=2):
 for i, Protocolo in enumerate(valores, start=2):
     print(f"Consultando valor: {Protocolo}")
