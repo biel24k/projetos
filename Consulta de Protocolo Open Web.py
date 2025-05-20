@@ -1,99 +1,86 @@
-import os
 import time
 from datetime import datetime
-from dotenv import load_dotenv
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from oauth2client.service_account import ServiceAccountCredentials
+import gspread
 
-# Carrega variáveis de ambiente
-load_dotenv()
+from Dados import *
 
-GOOGLE_SHEETS_URL = os.getenv("GOOGLE_SHEETS_URL")
-CREDENTIALS_FILE = os.getenv("CREDENTIALS_FILE", "credentials.json")
-USUARIO = os.getenv("PORTAL_USUARIO")
-SENHA = os.getenv("PORTAL_SENHA")
-URL = os.getenv("PORTAL_URL")
+inicio = time.time()
 
-def autorizar_planilha():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-    client = gspread.authorize(creds)
-    return client.open_by_url(GOOGLE_SHEETS_URL).get_worksheet(0)
+# === 1. Autenticação Google Sheets ===
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("telematica-459812-2dcf92fe61ca.json", scope)
+client = gspread.authorize(creds)
+spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1ZFLZR5aTHrtnQR44ofJS8PXHbKbyzr30F5_II_zggaE/edit#gid=0")
+sheet = spreadsheet.get_worksheet(0)
+valores = sheet.col_values(1)[1:]  # Coluna A (sem cabeçalho)
 
-def configurar_driver():
-    options = Options()
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+# === 2. Inicialização do navegador (Chrome) ===
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
-def login(driver):
-    driver.get(URL)
-    driver.find_element(By.XPATH, '//input[@type="text"]').send_keys(USUARIO)
-    driver.find_element(By.XPATH, '//input[@type="password"]').send_keys(SENHA)
-    driver.find_element(By.XPATH, '//button[@type="submit"]').click()
-    driver.execute_script("window.scrollBy(0, 200);")
+# === 3. Login no sistema ===
+driver.get(url)
+driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[1]/input').send_keys(usuario)
+driver.find_element(By.XPATH, '/html/body/app-root/app-layout-login/div/app-login/div/div/div[2]/form/div[2]/input').send_keys(senha)
+driver.find_element(By.XPATH, '//button[@type="submit"]').click()
+driver.execute_script("window.scrollBy(0, 200);")
 
-def consultar_protocolo(driver, protocolo):
-    campo = WebDriverWait(driver, 3).until(
-        EC.presence_of_element_located((By.XPATH, '//input[@type="search"]'))
-    )
-    campo.clear()
-    campo.send_keys(str(protocolo))
+# === 4. Acesso à tela de consulta ===
+WebDriverWait(driver, 3).until(
+    EC.presence_of_element_located((By.XPATH, '//a[contains(., "Consultar")]'))
+).click()
 
+# === 5. Consulta de protocolos ===
+updates = []  # lista de atualizações para batch_update
+for i, protocolo in enumerate(valores[:3], start=404):
+    print(f"Consultando protocolo: {protocolo}")
     try:
+        # Preencher campo de busca
+        campo = WebDriverWait(driver, 3).until(
+            EC.presence_of_element_located((By.XPATH, '//input[@type="search"]'))
+        )
+        campo.clear()
+        campo.send_keys(str(protocolo))
+
+        # Localiza linha do protocolo
         linha = WebDriverWait(driver, 3).until(
             EC.presence_of_element_located((By.XPATH, f'//tr[td[contains(text(), "{protocolo}")]]'))
         )
-        status = linha.find_element(By.XPATH, './td[12]').text.strip()
-    except Exception:
-        status = "Status não encontrado"
 
-    try:
+        status = linha.find_element(By.XPATH, './td[12]').text.strip()
         responsavel = linha.find_element(By.XPATH, './td[13]').text.strip()
+
         if not responsavel:
             responsavel = "(sem responsável)"
-    except Exception:
+            print(f"Protocolo {protocolo}: status='{status}' | sem responsável.")
+        else:
+            print(f"Protocolo {protocolo}: status='{status}' | responsável='{responsavel}'.")
+
+    except Exception as e:
+        print(f"Erro ao consultar protocolo {protocolo}: {e}")
+        status = "Status não encontrado"
         responsavel = "Erro ao buscar responsável"
 
-    return status, responsavel
+    # Adiciona atualizações em lote
+    updates.append({'range': f"L{i}", 'values': [[status]]})
+    updates.append({'range': f"E{i}", 'values': [[responsavel]]})
 
-def main():
-    inicio = time.time()
+# === 6. Atualização em lote da planilha ===
+if updates:
+    sheet.batch_update(updates)
+    print(f"{len(updates)//2} protocolos atualizados.")
+else:
+    print("Nenhuma atualização realizada.")
 
-    sheet = autorizar_planilha()
-    valores = sheet.col_values(1)[1:]
-
-    driver = configurar_driver()
-    login(driver)
-
-    # Acessa a aba de consulta
-    WebDriverWait(driver, 3).until(
-        EC.presence_of_element_located((By.XPATH, '//a[contains(., "Consultar")]'))
-    ).click()
-
-    for i, protocolo in enumerate(valores[:3], start=400):  # Ajuste conforme desejado
-        print(f"Consultando: {protocolo}")
-        status, responsavel = consultar_protocolo(driver, protocolo)
-
-        print(f"Status: {status}, Responsável: {responsavel}")
-        sheet.update_acell(f"L{i}", status)
-        sheet.update_acell(f"E{i}", responsavel)
-
-    driver.quit()
-    fim = time.time()
-    print(f"Execução finalizada em {int((fim - inicio) // 60)}m {int((fim - inicio) % 60)}s")
-
-if __name__ == "__main__":
-    main()
+# === 7. Encerramento e tempo de execução ===
+driver.quit()
+fim = time.time()
+minutos = int((fim - inicio) // 60)
+segundos = int((fim - inicio) % 60)
+print(f"Tempo total de execução: {minutos} minuto(s) e {segundos} segundo(s).")
